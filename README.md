@@ -1,10 +1,11 @@
-Documentation for FTC Team 19415
+# Documentation for FTC Fancy Lights
 
 This code is designed to control an LED strip in various ways based on messages received over MQTT (a lightweight messaging protocol for small sensors and mobile devices). It's written for use on a microcontroller running MicroPython, a lean and efficient implementation of Python 3.
 Key Components:
 
 ## Imports:
-    The code begins by importing necessary modules for network management, asynchronous operations, handling the LED strip, and MQTT communication.
+
+The code begins by importing necessary modules for network management, asynchronous operations, handling the LED strip, and MQTT communication.
 
 ## Global Variables:
 
