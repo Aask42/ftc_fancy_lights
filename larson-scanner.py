@@ -8,7 +8,7 @@ This is code written by Amelia Wietting for team 19415 C3 Robotics
 """
 
 # Set how many LEDs you have
-NUM_LEDS = 50
+NUM_LEDS = 86
 current_led = 1
 
 # Pick two hues from the colour wheel (from 0-360°, try https://www.cssscript.com/demo/hsv-hsl-color-wheel-picker-reinvented/ )
