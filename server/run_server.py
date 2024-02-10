@@ -1,6 +1,4 @@
 import paho.mqtt.client as mqtt
-import ssl
-import json
 import numpy as np
 import pyaudio
 import wave
@@ -9,17 +7,17 @@ import tkinter as tk
 from tkinter import filedialog
 from scipy.fft import rfft, rfftfreq
 from collections import deque
-import math
 import wave
 from pydub import AudioSegment
 import time
 from datetime import datetime
 
+
 # Fetch configurations
 from SERVER_CONFIG import MQTT_SERVER, MQTT_PORT, MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD
 
 # Global variables for audio processing
-audio_file = None
+audio_file = "server/white_and_nerdy.mp3"
 audio_thread = None
 audio_reactive_mode = False
 p = None
@@ -66,12 +64,22 @@ def on_connect(client, userdata, flags, rc):
     else:
         print(f"Connected with result code {rc}")
 
+last_publish_time = 0  # Global variable to track the last publish time
+
 def publish_message(topic, message):
-    client.publish(topic, message)
+    global last_publish_time
+    current_time = time.time()  # Get current time in seconds
+
+    # Check if at least 0.25 seconds have passed since last publish
+    if current_time - last_publish_time >= 0.01:
+        client.publish(topic, message)
+        last_publish_time = current_time  # Update the last publish time
+
 
 def handle_color_change():
-    color = input("Enter Hex color for RGB (e.g., #FF5733): ")
-    publish_message("color_change", color.upper())
+    color = input("Enter Hex color for RGB (e.g., #FF5733): ").upper()
+    message = f"{color},0.5"
+    publish_message("color_change", message)
 
 def handle_score():
     team_number = input("Enter team number: ")
@@ -146,6 +154,7 @@ def main_menu():
     print("0. Exit")
     choice = input("Enter your choice: ")
     return choice
+
 def audio_callback(in_data, frame_count, time_info, status):
     audio_buffer.append(np.frombuffer(in_data, dtype=np.int16))
     return (in_data, pyaudio.paContinue)
@@ -158,52 +167,75 @@ def stop_audio_stream():
     p.terminate()
 
 def process_audio():
-    global peak_bass, peak_treble
+    global previous_energy, beat_length
+
+    BEAT_THRESHOLD = 15000  # Threshold for beat detection (tweak as needed)
+    previous_energy = 0  # Initialize previous total energy
+    beat_length = 0  # Initialize beat length counter
 
     while audio_reactive_mode and audio_file:
+        # Write data to playback stream for hearing the song
         data = audio_file.readframes(CHUNK)
+        playback_stream.write(data)
+        
         if not data:
             break  # Stop if end of file
+        
         audio_data = np.frombuffer(data, dtype=np.int16)
-        # Write data to playback stream for hearing the song
-        playback_stream.write(data)
         
         # FFT analysis
         yf = rfft(audio_data)
         xf = rfftfreq(CHUNK, 1 / RATE)
-
+        
         # Calculate amplitudes
         bass = np.abs(yf[:len(xf) // 2])
         treble = np.abs(yf[len(xf) // 2:])
         bass_amp = np.average(bass)
         treble_amp = np.average(treble)
+        
+        # Calculate amplitudes
+        amplitudes = np.abs(yf[:len(xf) // 2])
+        total_energy = np.average(amplitudes)
 
-        # Update peak values or apply decay
-        peak_bass = max(bass_amp, peak_bass * (1 - decay_factor))
-        peak_treble = max(treble_amp, peak_treble * (1 - decay_factor))
+        # Beat detection for all frequencies
+        if abs(total_energy - previous_energy) > BEAT_THRESHOLD:
+            beat_length += 1  # Increment beat length counter
+        if beat_length > 3:  # A beat was previously detected
+            beat_length = 0  # Reset beat length counter
+            print(f"{total_energy - previous_energy}")
+            message = f"0,0,1,{beat_length}"
+            publish_message("audio_reactive", message)
+            beat_length = 0
 
-        # Prepare MQTT message with decayed peaks
-        max_bass = max(bass) if bass.any() else 1
-        max_treble = max(treble) if treble.any() else 1
-        num_leds_bass = math.ceil(peak_bass / max_bass * 10)
-        num_leds_treble = math.ceil(peak_treble / max_treble * 10)
+        # Update previous total energy for next iteration
+        previous_energy = total_energy
 
-        message = json.dumps({'bass': num_leds_bass, 'treble': num_leds_treble})
-        publish_message("audio_reactive", message)
 
 def convert_to_wav(file_path):
-    audio = AudioSegment.from_file(file_path)
+    audio = AudioSegment.from_mp3(file_path)
+    print("Original sample rate:", audio.frame_rate)  # Print original sample rate
+    
     wav_path = file_path.rsplit('.', 1)[0] + '.wav'
+    audio = audio.set_frame_rate(44100)  # Set a standard frame rate
+    audio = audio.set_channels(2)  # Set to stereo
+    
     audio.export(wav_path, format='wav')
     return wav_path
+
 
 def start_audio_stream():
     global p, audio_stream, playback_stream
     p = pyaudio.PyAudio()
-    audio_stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK, stream_callback=audio_callback)
-
+    audio_stream = p.open(format=p.get_format_from_width(audio_file.getsampwidth()),
+                    channels=audio_file.getnchannels(),
+                    rate=audio_file.getframerate(),
+                    output=True)
+    
     # Initialize playback stream
-    playback_stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, output=True)
+    playback_stream = p.open(format=p.get_format_from_width(audio_file.getsampwidth()),
+                    channels=audio_file.getnchannels(),
+                    rate=audio_file.getframerate(),
+                    output=True)
 
 def stop_audio_stream():
     global p, audio_stream, playback_stream
@@ -233,6 +265,26 @@ def handle_audio_reactive_mode():
             start_audio_stream()
             threading.Thread(target=process_audio).start()
             print("Audio reactive mode started")
+
+
+def handle_hold():
+    color = input("Enter Hex color for RGB (e.g., #FF5733): ").upper()
+    while True:
+
+        try:
+            text = input("hit enter")  # or raw_input in python2
+            if text == "":
+                print("you pressed enter")
+                message = f"{color},0.25"
+                publish_message("color_change", message)
+                time.sleep(0.25)
+            else:
+                # Optional: Perform some action when Enter is not pressed
+                #time.sleep(0.25)
+                pass
+        except KeyboardInterrupt:
+            print("\nProgram terminated.")
+            break
 
 # Start our clock
 
@@ -268,9 +320,11 @@ while run_loop:
         fade_colors_about()
     elif choice == '5':
         print("Under Construction")
-        #handle_audio_reactive_mode()
-        #if not audio_reactive_mode:
-        #    stop_audio_stream()
+        handle_audio_reactive_mode()
+        if not audio_reactive_mode:
+            stop_audio_stream()
+    elif choice == '6':
+        handle_hold()
     elif choice == '0':
         print('Quitting Command n Control Server ^_^')
         print('Thank you for using the FTC MQTT Fancy Light Utility')
