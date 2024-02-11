@@ -218,6 +218,7 @@ async def rainbows():
             led_strip.set_rgb(HOUR_HAND_POS, 0,0,255)
             led_strip.set_rgb(HOUR_HAND_POS + NUM_LEDS//2, 0,0,255)
             row_2 = (i + (NUM_LEDS // 2))
+            
             if not HOUR_HAND_POS == SECOND_HAND_POS:
                 led_strip.set_rgb(SECOND_HAND_POS, 255,255,255)
                 if row_2 == SECOND_HAND_POS:
