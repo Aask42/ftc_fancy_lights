@@ -27,7 +27,7 @@ TREBLE_COLOR = (0, 0, 255)  # Blue for treble
 current_color = "AA0000"
 
 UPDATE_INTERVAL_BLINKIES = 0.25  # refresh interval for blinkies in seconds
-BRIGHTNESS = 0.75
+BRIGHTNESS = 0.35
 MAX_SOLID_BRIGHTNESS = 255 # Max Solid Color Brightness
 
 
@@ -55,7 +55,7 @@ HOUR_HAND_POS = 0  # Starting position of the second hand
 LAST_UPDATE = utime.time()  # Time of the last update
 last_drawn_hand = 0
 
-LEDS_PER_CIRCLE = NUM_LEDS/2
+LEDS_PER_CIRCLE = NUM_LEDS//2
 
 def handle_time_message(msg):
     global SECOND_HAND_POS, LAST_UPDATE, MINUTE_HAND_POS, HOUR_HAND_POS
@@ -63,7 +63,7 @@ def handle_time_message(msg):
 
     try:
         # Print the received message for debugging
-        print("Received time message:", msg)
+        #print("Received time message:", msg)
 
         tick_number_str, time_str = msg.split(',')
         tick_number = int(tick_number_str.strip())  # Convert tick_number to an integer
@@ -75,7 +75,7 @@ def handle_time_message(msg):
 
         hours, minutes, seconds = [int(part.strip()) for part in time_parts]
         # Update minute hand position
-        MINUTE_HAND_POS = int((minutes * LEDS_PER_CIRCLE // 60) % LEDS_PER_CIRCLE + LEDS_PER_CIRCLE)
+        MINUTE_HAND_POS = int((minutes * LEDS_PER_CIRCLE // 60 + LEDS_PER_CIRCLE) % LEDS_PER_CIRCLE) 
 
         # Update hour hand position (approximation)
         HOUR_HAND_POS = int(((hours % 12) * LEDS_PER_CIRCLE // 12 + minutes // 12) % LEDS_PER_CIRCLE)
@@ -85,16 +85,15 @@ def handle_time_message(msg):
         #SECOND_HAND_POS = int(SECOND_HAND_POS % LEDS_PER_CIRCLE + LEDS_PER_CIRCLE)
         if SECOND_HAND_POS < NUM_LEDS:
            SECOND_HAND_POS = int(SECOND_HAND_POS + LEDS_PER_CIRCLE)
-        
-        if MINUTE_HAND_POS > NUM_LEDS:
-           MINUTE_HAND_POS = int(NUM_LEDS - MINUTE_HAND_POS)
+        if MINUTE_HAND_POS < NUM_LEDS:
+           MINUTE_HAND_POS = int(MINUTE_HAND_POS + LEDS_PER_CIRCLE)
         if HOUR_HAND_POS > LEDS_PER_CIRCLE:
            HOUR_HAND_POS = int(HOUR_HAND_POS - LEDS_PER_CIRCLE)
 
         LAST_UPDATE = utime.time()
-        print("Handled time message, SECOND_HAND_POS:", SECOND_HAND_POS)
-        print("Handled time message, MINUTE_HAND_POS:", MINUTE_HAND_POS)
-        print("Handled time message, HOUR_HAND_POS:", HOUR_HAND_POS)
+        #print("Handled time message, SECOND_HAND_POS:", SECOND_HAND_POS)
+        #print("Handled time message, MINUTE_HAND_POS:", MINUTE_HAND_POS)
+        #print("Handled time message, HOUR_HAND_POS:", HOUR_HAND_POS)
 
     except Exception as e:
         print("Error in handle_time_message:", str(e))
@@ -171,6 +170,50 @@ wifi_led_on = False
 def hue_offset(index, offset):
     return (float(index) / (NUM_LEDS // 2) + offset) % 1.0
 
+direction_anticlockwise = False
+async def marquee_strip():
+    global quit_animation, pause_animation, pause_timeout, led_strip, wifi_connected, mqtt_connected, direction_anticlockwise
+
+    quit_animation = False
+    hue = 0
+    SPEED = 10
+    offset = 0.0
+
+    while not quit_animation:
+        if pause_animation:
+            print(f"pausing rainbows for {pause_timeout} seconds")
+            await uasyncio.sleep(pause_timeout)
+            pause_timeout = 0
+            pause_animation = False
+
+        SPEED = max(1, min(255, SPEED))
+        offset += float(SPEED) / 2000.0
+        pins_to_skip = set()
+
+        # Clock hands logic removed for simplification
+        # Add your clock hands logic here if needed
+
+        # Update LEDs in a batch if possible
+        range_leds = None
+        if direction_anticlockwise:
+            range_leds = range(NUM_LEDS)
+        else:
+            range_leds = range(NUM_LEDS - 1, -1, -1)
+            
+        for i in range_leds:
+            if i in pins_to_skip:
+                continue
+            hue = hue_offset(i, offset)
+            if (i + NUM_LEDS//3) % NUM_LEDS not in pins_to_skip:
+                led_strip.set_hsv((i + NUM_LEDS//2) % NUM_LEDS, 0, 0, 0)
+            led_strip.set_hsv(i, hue, 1.0, .25)
+            await uasyncio.sleep(0.05)
+        # Remove or reduce sleep time for faster updates
+        #await uasyncio.sleep(0.00000001)
+
+        offset = (offset + 1) % NUM_LEDS
+        direction_anticlockwise = not direction_anticlockwise
+
 async def rainbows():
     global quit_animation, pause_animation, pause_timeout, led_strip
     global wifi_status_cur_led, wifi_led_on, wifi_status_led_range, wifi_connected, mqtt_connected
@@ -191,7 +234,7 @@ async def rainbows():
         
         pins_to_skip = set()
         if not wifi_connected:
-            pins_to_skip.update(range(wifi_status_led_range[0], wifi_status_led_range[1]))
+            pins_to_skip.update(range(int(wifi_status_led_range[0]), int(wifi_status_led_range[1])))
         if mqtt_connected:
             hour_hand_positions = [(HOUR_HAND_POS + offset) % NUM_LEDS for offset in range(-2, 3)]
             minute_hand_positions = [(MINUTE_HAND_POS + offset) % NUM_LEDS for offset in range(-1, 2)]
@@ -254,6 +297,8 @@ async def run_animation(animation_name, color=1):
         animation_task = uasyncio.create_task(alternating_blinkies(color))
     elif animation_name == "rainbows":
         animation_task = uasyncio.create_task(rainbows())
+    elif animation_name == "chase":
+        animation_task = uasyncio.create_task(marquee_strip())
     await animation_task
 
 def sub_cb(topic, msg):
@@ -380,7 +425,7 @@ def connectMQTT():
     except Exception as e:
         print('Error connecting to %s MQTT broker error: %s' % (MQTT_SERVER, e))
 
-    topics = [b'time',b'color_change', b'scores', b'animate', b'audio_reactive']
+    topics = [b'time',b'color_change', b'scores', b'animate', b'audio_reactive', b'chase']
 
     for topic in topics:
         try:
@@ -400,12 +445,12 @@ def setup():
         if wifi_connected:
             print('Wifi connection successful!')
             wifi_status = "connected"
-            make_leds_color(color_hex="00FF00,2")  # Green for success
+            make_leds_color(color_hex="005500,2")  # Green for success
         else:
             print(f'Wifi connection failed!')
             wifi_status = "failed"
-            for _ in range(3):  # Flash red three times
-                make_leds_color(color_hex="FF0000,0.5")
+            for _ in range(1):  # Flash red three times
+                make_leds_color(color_hex="330000,0.5")
                 time.sleep(1)
                 make_leds_color(color_hex="000000,0.5")
                 time.sleep(1)
@@ -415,7 +460,7 @@ def setup():
         wifi_status = "failed"
         wifi_connected = False
         for _ in range(4):  # Flash red three times
-            make_leds_color(color_hex="FF0000,0.5")
+            make_leds_color(color_hex="990000,0.5")
             time.sleep(.5)
             make_leds_color(color_hex="000000,0.5")
             time.sleep(0.5)
@@ -426,7 +471,7 @@ def setup():
         try:
             print("Attempting to connect to MQTT broker...")
             client = connectMQTT()
-            #make_leds_color(color_hex="00FF00,2")
+            #make_leds_color(color_hex="005500,2")
             return client
 
         except Exception as e:
@@ -435,7 +480,7 @@ def setup():
             
 async def main():
     client = setup()
-    uasyncio.create_task(run_animation("rainbows"))
+    uasyncio.create_task(run_animation("chase"))
 
     if wifi_connected:
         uasyncio.create_task(mqtt_task(client))
@@ -445,5 +490,6 @@ async def main():
 uasyncio.run(main())
     
     
+
 
 
