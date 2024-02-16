@@ -44,7 +44,7 @@ class HalfSecondClock:
     def start(self):
         while self.running:
             self.tick()
-            time.sleep(1)  # Wait for one second
+            time.sleep(0.10)  # Wait for one second
 
     def stop(self):
         self.running = False
@@ -78,7 +78,7 @@ def publish_message(topic, message):
 
 def handle_color_change():
     color = input("Enter Hex color for RGB (e.g., #FF5733): ").upper()
-    message = f"{color},0.5"
+    message = f"{color},5"
     publish_message("color_change", message)
 
 def handle_score():
@@ -95,6 +95,7 @@ def handle_animate():
     elif animation == "1":
         animation = "rainbows"
     publish_message("animate", animation)
+        
     
 def rgb_to_hex(rgb):
     """Convert an RGB tuple to a hexadecimal color string."""
@@ -120,20 +121,20 @@ def fade_colors_about():
     red = (255, 0, 0)
     green = (0, 255, 0)
     blue = (0, 0, 255)
-    max_cycle = 10
+    max_cycle = 3
     loop_count = 0
     while max_cycle > loop_count:
         # Fade from red to green
         for color in interpolate_color(red, green, step):
-            publish_message("color_change", f"{color}")
+            publish_message("color_change", f"{color},0.01")
 
         # Fade from green to blue
         for color in interpolate_color(green, blue, step):
-            publish_message("color_change", f"{color}")
+            publish_message("color_change", f"{color},0.01")
 
         # Fade from blue back to red
         for color in interpolate_color(blue, red, step):
-            publish_message("color_change", f"{color}")
+            publish_message("color_change", f"{color},0.01")
         loop_count += 1
 
 def select_audio_file():
@@ -150,7 +151,7 @@ def main_menu():
     print("2. Publish to score")
     print("3. Publish to animate")
     print("4. Cycle the rainbows")
-    print("5. Toggle Audio Reactive Mode")
+    print("6. Toggle ENTER mode")
     print("0. Exit")
     choice = input("Enter your choice: ")
     return choice
@@ -277,7 +278,7 @@ def handle_hold():
                 print("you pressed enter")
                 message = f"{color},0.25"
                 publish_message("color_change", message)
-                time.sleep(0.25)
+                time.sleep(5.00)
             else:
                 # Optional: Perform some action when Enter is not pressed
                 #time.sleep(0.25)
@@ -328,6 +329,9 @@ while run_loop:
     elif choice == '0':
         print('Quitting Command n Control Server ^_^')
         print('Thank you for using the FTC MQTT Fancy Light Utility')
+        print('This iteration of this code created for the 2024 \n \
+              First Tech Challenge IOWA State Championship in Iowa City, \n \
+              Iowa at the XTreme Arena!')
         print('An Aask Labs Product - 2024')
         clock.stop()
         run_loop = False
