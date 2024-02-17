@@ -44,7 +44,7 @@ class HalfSecondClock:
     def start(self):
         while self.running:
             self.tick()
-            time.sleep(0.10)  # Wait for one second
+            time.sleep(1)  # Wait for one second
 
     def stop(self):
         self.running = False
@@ -78,7 +78,7 @@ def publish_message(topic, message):
 
 def handle_color_change():
     color = input("Enter Hex color for RGB (e.g., #FF5733): ").upper()
-    message = f"{color},5"
+    message = f"{color},15"
     publish_message("color_change", message)
 
 def handle_score():
@@ -86,6 +86,9 @@ def handle_score():
     result = input("Enter win or lose: ")
     message = f"{team_number},{result}"
     publish_message("scores", message)
+
+def handle_chase():
+    publish_message("animate", "chase")
 
 def handle_animate():
     animation = input("Select 1 for 'rainbows' or 2 for 'alternating_blinkies': ")
@@ -126,15 +129,16 @@ def fade_colors_about():
     while max_cycle > loop_count:
         # Fade from red to green
         for color in interpolate_color(red, green, step):
-            publish_message("color_change", f"{color},0.01")
+            publish_message("color_change", f"{color},1")
+            
 
         # Fade from green to blue
         for color in interpolate_color(green, blue, step):
-            publish_message("color_change", f"{color},0.01")
+            publish_message("color_change", f"{color},0.1")
 
         # Fade from blue back to red
         for color in interpolate_color(blue, red, step):
-            publish_message("color_change", f"{color},0.01")
+            publish_message("color_change", f"{color},0.1")
         loop_count += 1
 
 def select_audio_file():
@@ -309,8 +313,19 @@ except Exception as e:
 client.loop_start()
 
 run_loop = True
+animate = True
 while run_loop:
     choice = main_menu()
+    '''if clock.tick_count % 60 == 0:
+        publish_message("animate", "rainbows")
+    elif clock.tick_count % 30 == 0:
+        publish_message("animate", "chase")
+    elif clock.tick_count % 42 == 0:
+        publish_message("animate", "alternating_blinkies,1")
+    
+    else:
+        continue
+    time.sleep(1)'''
     if choice == '1':
         handle_color_change()
     elif choice == '2':
@@ -326,6 +341,8 @@ while run_loop:
             stop_audio_stream()
     elif choice == '6':
         handle_hold()
+    elif choice == '7':
+        handle_chase()
     elif choice == '0':
         print('Quitting Command n Control Server ^_^')
         print('Thank you for using the FTC MQTT Fancy Light Utility')
