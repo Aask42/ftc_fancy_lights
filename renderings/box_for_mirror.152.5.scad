@@ -1,8 +1,9 @@
 height = 60; 
-side_length_global = 87.5;
+side_length_global = 92.5;
 corner_offset_global = 30;
 abs_width_x = corner_offset_global * 2 + side_length_global;
 abs_width_y = corner_offset_global * 2 + side_length_global;
+
 
 module create_box_outline(sidewall_offset=0, cut_corner_offset=0, vertical_mod = 0, height_mod = height, radius = 1, radius2 = 0, leds = false){
     
@@ -22,6 +23,8 @@ module create_box_outline(sidewall_offset=0, cut_corner_offset=0, vertical_mod =
     point7 = [edge_inset,side_offset + edge_inset,0];
     point8 = [0,side_offset,0];
     points = [ point1, point2, point3, point4, point5, point6, point7, point8 ];
+    
+    //dump_points(points); // Replace 10 and 20 with your desired values for edge_inset and side_offset
     translate([-(sidewall_offset + cut_corner_offset * 2)/2,-(sidewall_offset + cut_corner_offset * 2)/2,vertical_mod]) c3_outline(points,radius, radius2,height_mod);
     
     // Now we should echo the x max and y max lengths
@@ -69,8 +72,8 @@ module c3_outline(points, radius, radius2, height ){
 module box_back(){
     difference(){
         color("white") create_box_outline(sidewall_offset = -4,cut_corner_offset=0, vertical_mod = 0, height_mod = 20, radius = .01, radius2 = .01);
-        #translate([abs_width_x/2,abs_width_y/2,902]) rotate([0,90,90]) sphere(900, $fn=100);
-        #translate([0,abs_width_y/2 -12,0]) rotate([0,0,0]) create_box_outline(sidewall_offset = -side_length_global -2,cut_corner_offset=-corner_offset_global/2 - 2, vertical_mod = -2, height_mod = height - 10, radius=3, radius2=1);
+        #translate([abs_width_x/2,abs_width_y/2,902]) rotate([0,90,90]) sphere(900, $fn=600);
+        #translate([0,abs_width_y/2 -13,0]) rotate([0,0,0]) create_box_outline(sidewall_offset = -side_length_global -2,cut_corner_offset=-corner_offset_global/2 - 2, vertical_mod = -2, height_mod = height - 10, radius=3, radius2=1);
         #translate([0,abs_width_y + 5,-49]) rotate([90,0,0]) create_box_outline(sidewall_offset = -side_length_global -2,cut_corner_offset=-corner_offset_global/2 - 2, vertical_mod = -2, height_mod = height - 10, radius=3, radius2=1);
     }
 }
@@ -79,7 +82,7 @@ front_plexi_inset = 4;
 module full_box(){
     difference(){
         //make the box
-        echo("Make the box: ")
+        echo("Kick off making the box: ")
 
         color("blue") create_box_outline(height_mod=height);
         
@@ -104,7 +107,7 @@ module full_box(){
         #translate([0,abs_width_y + 5,-49]) rotate([90,0,0]) create_box_outline(sidewall_offset = -side_length_global -2,cut_corner_offset=-corner_offset_global/2 - 2, vertical_mod = -2, height_mod = height - 10, radius=3, radius2=1);
         //create_box_outline(sidewall_offset = -4,cut_corner_offset=0, vertical_mod = 2, height_mod = 8, radius = 10, radius2 = 4);
         // Make a hole for the wiring on this prototype
-        echo("Make a hole for the wiring on this prototype");
+        //echo("Make a hole for the wiring on this prototype");
         
         //#translate([0,abs_width_y,-49]) rotate([90,0,0]) create_box_outline(sidewall_offset = -side_length_global -2,cut_corner_offset=-corner_offset_global/2 - 2, vertical_mod = -2, height_mod = height - 10, radius=3, radius2=1);
         //cube([10,10,85]);
