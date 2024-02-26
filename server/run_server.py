@@ -91,14 +91,34 @@ def handle_chase():
     publish_message("animate", "chase")
 
 def handle_animate():
-    animation = input("Select 1 for 'rainbows' or 2 for 'alternating_blinkies': ")
+    animation = input("Select 1 for 'rainbows', 2 for 'alternating_blinkies', 3 for chase: ")
     if animation == "2":
+        animation = "alternating_blinkies"
         color_choice = input("Enter 1 for blue, 2 for red: ")
         animation += f",{color_choice}"
+    if animation == "3":
+        animation = "chase"
     elif animation == "1":
         animation = "rainbows"
     publish_message("animate", animation)
+       
+def handle_update():
+    config_file_list = ["CONFIG/CLOCK_CONFIG.py","CONFIG/FTC_TEAM_CONFIG.py", "CONFIG/LED_MANAGER.py", "CONFIG/MQTT_CONFIG.py", "CONFIG/WIFI_CONFIG.py"]
+    while True: 
+        for i,item in enumerate(config_file_list):
+            print(f"{i}: {item}")
+        input_data = input("Select a filename: ")
+        try:
+            filename = config_file_list[int(input_data)]
+            field = input("What field would you like to update in this file? BRIGHTNESS, WIFI_LIST, etc...")
+            content = input("What is the new value?")
+            break
+        except:
+            print("Invalid option")
         
+    message = f"{filename}, {field}, {content}"
+    publish_message("update", message)
+
     
 def rgb_to_hex(rgb):
     """Convert an RGB tuple to a hexadecimal color string."""
@@ -155,7 +175,13 @@ def main_menu():
     print("2. Publish to score")
     print("3. Publish to animate")
     print("4. Cycle the rainbows")
+    print("5. EXPERIMENTAL: Audio Mode")
     print("6. Toggle ENTER mode")
+    print("7. Enable Chase Animation")
+    print("8. Issue Config File Update")
+    #print("9. Issue Main.py update")
+
+    
     print("0. Exit")
     choice = input("Enter your choice: ")
     return choice
@@ -343,6 +369,8 @@ while run_loop:
         handle_hold()
     elif choice == '7':
         handle_chase()
+    elif choice == '8':
+        handle_update()
     elif choice == '0':
         print('Quitting Command n Control Server ^_^')
         print('Thank you for using the FTC MQTT Fancy Light Utility')
