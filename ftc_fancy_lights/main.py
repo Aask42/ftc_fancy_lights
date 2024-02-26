@@ -9,7 +9,8 @@ from CONFIG.WIFI_CONFIG import COUNTRY, MAX_WIFI_CONNECT_TIMEOUT, WIFI_LIST
 from CONFIG.MQTT_CONFIG import MQTT_USERNAME, MQTT_PASSWORD, MQTT_SERVER, MQTT_CLIENT_ID
 from CONFIG.FTC_TEAM_CONFIG import TEAM_ASSIGNED
 from CONFIG.CLOCK_CONFIG import NTP_SERVER, TIMEZONE_OFFSET, DAYLIGHT_SAVING
-from CONFIG.LED_MANAGER import NUM_LEDS, LED_PIN, BRIGHTNESS, MAX_SOLID_BRIGHTNESS
+from CONFIG.LED_MANAGER import NUM_LEDS, LED_PIN, BRIGHTNESS, MAX_SOLID_BRIGHTNESS, STARTING_ANIMATION
+from CONFIG.OTA_CONFIG import OTA_HOST, PROJECT_NAME, FILENAMES
 
 import uasyncio
 import time
@@ -21,9 +22,10 @@ import network
 from umqtt.simple import MQTTClient
 import sys
 import json
-#import plasma
 import neopixel
+import uos
 
+import micropython_ota
 
 # Audio reactive constants
 BASS_COLOR = (255, 0, 0)  # Red for bass
@@ -31,7 +33,7 @@ TREBLE_COLOR = (0, 0, 255)  # Blue for treble
 
 current_color = "AA0000"
 
-UPDATE_INTERVAL_BLINKIES = 0.25  # refresh interval for blinkies in seconds
+UPDATE_INTERVAL_BLINKIES = 0.0001  # refresh interval for blinkies in seconds
 
 
 current_leds = [[0] * 3 for _ in range(NUM_LEDS)]
@@ -173,24 +175,24 @@ def make_leds_color(color_hex="FF0000,4"):
 async def handle_audio_data(msg):
     global current_leds, target_leds
     global pause_animation, lit_led
-    print(f"triggering audio_reactive {msg} ")
-    pause_animation = True
-    data = msg.split(",")
-    bass_leds = int(data[0])
-    treble_leds = int(data[1])
-    is_beat = bool(data[2])
-    is_same_beat = int(data[3])
-    lit_led = 0
-    print(f"{is_beat}")
-    if is_beat:
-        pause_animation = True
-        make_leds_color("AA00FF")
-        time.sleep(0.5 * is_same_beat);    
-        pause_animation = False
-        led_strip.set_rgb(lit_led, 255,255,255)
-        lit_led += 1 
-        lit_led = int(lit_led % NUM_LEDS/2 + NUM_LEDS/2)
-        
+    print(f"Not Implemented {msg} ")
+#     pause_animation = True
+#     data = msg.split(",")
+#     bass_leds = int(data[0])
+#     treble_leds = int(data[1])
+#     is_beat = bool(data[2])
+#     is_same_beat = int(data[3])
+#     lit_led = 0
+#     print(f"{is_beat}")
+#     if is_beat:
+#         pause_animation = True
+#         make_leds_color("AA00FF")
+#         time.sleep(0.5 * is_same_beat);    
+#         pause_animation = False
+#         led_strip.set_rgb(lit_led, 255,255,255)
+#         lit_led += 1 
+#         lit_led = int(lit_led % NUM_LEDS/2 + NUM_LEDS/2)
+#         
 
    
 
@@ -225,32 +227,6 @@ def hsv_to_rgb(h, s, v):
     if i == 5: return (v, p, q)
 def hue_offset(index, offset, divisor = 2):
     return (float(index) / (NUM_LEDS // divisor) + offset) % 1.0
-
-async def set_leds(led_settings):
-    global ticked
-    """
-    Set the LEDs based on a list of settings.
-    Each setting in the list should be in the format [LED, H, S, V, SleepTime].
-    """
-    for setting in led_settings:
-        led_index, hue, saturation, value, sleep_time = setting
-
-        # Convert HSV to RGB
-        r, g, b = hsv_to_rgb(hue, saturation, value)
-        # Convert float RGB values (0 to 1 range) to integer RGB (0 to 255 range)
-        r, g, b = int(r * 255), int(g * 255), int(b * 255)
-
-        # Set the LED color
-        led_strip[led_index] = (r, g, b)
-        led_strip.write()
-
-        await uasyncio.sleep(sleep_time)
-
-        #if ticked:
-            #print("Cancel this run!")
-            #return False, led_settings  # Return the remaining settings
-
-    return True, None
         
 # Global variable for direction change
 direction_change = False
@@ -271,6 +247,32 @@ def update_strip(position, length, cycle):
         led_strip[idx] = color
 
     led_strip.write()
+
+async def set_leds(led_settings):
+    global ticked
+    """
+    Set the LEDs based on a list of settings.
+    Each setting in the list should be in the format [LED, H, S, V, SleepTime].
+    """
+    for setting in led_settings:
+        led_index, hue, saturation, value, sleep_time = setting
+
+        # Convert HSV to RGB
+        r, g, b = hsv_to_rgb(hue, saturation, value)
+        # Convert float RGB values (0 to 1 range) to integer RGB (0 to 255 range)
+        r, g, b = int(r * 255), int(g * 255), int(b * 255)
+
+        # Set the LED color
+        led_strip[led_index] = (r, g, b)
+        led_strip.write()
+        
+
+        #if ticked:
+            #print("Cancel this run!")
+            #return False, led_settings  # Return the remaining settings
+
+    return True, None
+
 
 def hsv_to_rgb(h, s, v):
     if s == 0.0: return (v, v, v)
@@ -293,22 +295,23 @@ def toggle_direction(timer):
 
 # Setup timer interrupt
 timer = machine.Timer(-1)
-timer.init(period=1000, mode=machine.Timer.PERIODIC, callback=toggle_direction)
-SEGMENT_LENGTH = NUM_LEDS // 2
+timer.init(period=500, mode=machine.Timer.PERIODIC, callback=toggle_direction)
+SEGMENT_LENGTH = NUM_LEDS // 3
 MAX_COLOR_CYCLE = 144  # Maximum value for the color cycle
-async def marquee_strip():
-    global direction_change, loop_count, quit_animation, pause_animation, pause_timeout
-    position = 0
-    direction = 1
-    cycle = 1
+position = 0
 
+async def chase():
+    global direction_change, loop_count, quit_animation, pause_animation, pause_timeout, position, ticked
+    direction = -1
+    cycle = 1
     while not quit_animation:
         if pause_animation:
-            print(f"Pausing rainbows for {pause_timeout} seconds")
+            print(f"Pausing chase for {pause_timeout} seconds")
             await uasyncio.sleep(pause_timeout)
             pause_timeout = 0
             pause_animation = False
-        
+        #print(f"looping chase {cycle}")
+
         update_strip(position, SEGMENT_LENGTH, cycle)
 
         # Update the position and cycle
@@ -318,13 +321,15 @@ async def marquee_strip():
             cycle = 1
 
         # Check for direction change
-        if direction_change:
+        #if direction_change or ticked:
+        if ticked:
             direction *= -1
             direction_change = False
+            ticked = False
             loop_count += NUM_LEDS // 120
 
-        await uasyncio.sleep(0.01)  # Non-blocking sleep
-
+        await uasyncio.sleep(0.0001)  # Non-blocking sleep
+            
 previous_last_led = None
 cycle_count = 0
 async def marquee_strip_old():
@@ -346,137 +351,224 @@ async def marquee_strip_old():
     
     second_width = NUM_LEDS // 120
     #await set_time()  # Synchronize time
-    
-    while not quit_animation:
-        if pause_animation:
-            print(f"Pausing rainbows for {pause_timeout} seconds")
-            await uasyncio.sleep(pause_timeout)
-            pause_timeout = 0
-            pause_animation = False
+
+
+def update_strip_rainbow(position, length, cycle):
+    # Calculate the color based on the cycle value
+    hue = cycle / MAX_COLOR_CYCLE
+    color = hsv_to_rgb(hue, 1, 0.5)
+
+    # Turn on LEDs in the specified segment
+    for i in range(position, position + length):
+        idx = i % NUM_LEDS  # Loop around if index exceeds NUM_LEDS
+        led_strip[idx] = color
         
+def get_clock_hand_positions():
+    # Get the current time
+    t = utime.localtime()
+    hour = t.tm_hour % 12  # Convert to 12-hour format
+    minute = t.tm_min
+    second = t.tm_sec
 
-        current_time = get_time()
-        current_second = current_time[5] 
-        current_millisecond = current_time[6]  # Assuming this is the millisecond component
-        
-        # Check if the second has changed within a fudge factor of ±100 ms
-        fudge_factor = 50  # 100 ms
-        current_millisecond_adjusted = (current_millisecond + fudge_factor) % 1000
-        if not second_changed:
-            second_changed = current_millisecond_adjusted < (2 * fudge_factor)
+    # Calculate positions
+    hour_pos = int((hour / 12.0) * NUM_LEDS)
+    minute_pos = int((minute / 60.0) * NUM_LEDS)
+    second_pos = int((second / 60.0) * NUM_LEDS)
 
-        if second_changed:
-            #print(f"Second changed (within fudge factor) {current_millisecond_adjusted}, stepping forward")
-            ticked = False
-            # Perform your stepping forward action here
-
-            offset += float(SPEED) / 2000.0
-            led_settings = [] 
-            pins_to_skip = set()                
-            # Toggle direction based on cycle_count 
-            current_time = get_time()
-            start = SECOND_HAND_POS
-
-            #if previous_last_led is not None:
-            #    start = previous_last_led
-            #    previous_last_led = None
-            if cycle_count % 2 == 0:
-                print(f"Tick {tick_number}")
-                for i in range(start, NUM_LEDS + start):
-                    if i not in pins_to_skip:
-                        hue = hue_offset(i, offset)
-                        led = (i) % NUM_LEDS
-
-                        if not led_states[led]:
-                            led_settings.append([led, hue, 1.0, BRIGHTNESS, led_sleep_time])
-                            led_states[led] = True
-
-                    led_opposite = (led - NUM_LEDS // 2 + 5) % NUM_LEDS
-                    if led_opposite not in pins_to_skip and led_states[led_opposite]:
-                        led_settings.append([led_opposite, 0, 0, 0, led_sleep_time])
-                        led_states[led_opposite] = False
-
-            else:
-                print(f"Tock {tick_number}")
-                for i in range(NUM_LEDS + start, -1, -1):
-                    if i not in pins_to_skip:
-                        hue = hue_offset(i, offset)
-                        led = (i) % NUM_LEDS
-
-                        if not led_states[led]:
-                            led_settings.append([led, hue, 1.0, BRIGHTNESS, led_sleep_time])
-                            led_states[led] = True
-
-                    led_opposite = (led - NUM_LEDS // 2) % NUM_LEDS
-                    if led_opposite not in pins_to_skip and led_states[led_opposite]:
-                        led_settings.append([led_opposite, 0, 0, 0, led_sleep_time])
-                        led_states[led_opposite] = False 
-            
-                # Call set_leds and check the return value
-            success, remaining_settings = await uasyncio.create_task(set_leds(led_settings))
-            
-            # If set_leds was interrupted, handle the remaining settings
-            if not success:
-                #cycle_count -= 1
-                previous_last_led = remaining_settings[-1][0]
-                #await uasyncio.create_task(set_leds(remaining_settings))
-            else:
-                previous_last_led = led_settings[-1][0]
-           
-            cycle_count += 1
-
-
-# Function to create a rainbow effect
+    return hour_pos, minute_pos, second_pos
+SPEED = 5
+UPDATES = 1000
 async def rainbows():
-    SPEED = 15
-    UPDATES = 100
+    global SPEED, UPDATES
     offset = 0.0
-    quit_animation = False
 
-    while not quit_animation:
+    while True:
+        SPEED = min(255, max(1, SPEED))
+        offset += float(SPEED) / 500.0
+
+        pins_to_skip = set()
+        if not wifi_connected:
+            pins_to_skip.update(range(int(wifi_status_led_range[0]), int(wifi_status_led_range[1])))
+        if mqtt_connected:
+            hour_hand_positions = [(HOUR_HAND_POS + offset) % NUM_LEDS for offset in range(-2, 3)]
+            minute_hand_positions = [(MINUTE_HAND_POS + offset) % NUM_LEDS for offset in range(-1, 2)]
+
+            pins_to_skip.update(hour_hand_positions)
+            pins_to_skip.update(minute_hand_positions)
+
+            # Setting second hand on both rows
+            second_hand_positions = [SECOND_HAND_POS, (SECOND_HAND_POS + NUM_LEDS // 2) % NUM_LEDS]
+            second_hand_hue = (hue_offset(SECOND_HAND_POS, offset) + 0.5) % 1.0
+            complementary_hue = (hue_offset(0, offset) + 0.5) % 1.0
+            #hue = float(i) / (NUM_LEDS // 2)
+            rgb = hsv_to_rgb(complementary_hue, 1.0, 1.0)
+            rgb_int = tuple(int(c * 255) for c in rgb)
+
+            for pos in second_hand_positions:
+                led_strip[pos] = rgb_int
+                
+                #led_strip.set_hsv(pos, second_hand_hue, 1.0, 1.0)
+                pins_to_skip.add(pos)
+            complementary_hue = (hue_offset(pos, offset) + 0.5) % 1.0
+            #hue = float(i) / (NUM_LEDS // 2)
+            rgb = hsv_to_rgb(complementary_hue, 1.0, 0.75)
+            rgb_int = tuple(int(c * 255) for c in rgb)
+            # Setting hour and minute hands with offset hue
+            for pos in hour_hand_positions + minute_hand_positions:
+                
+                led_strip[pos] = rgb_int
+                #led_strip.set_hsv(pos, complementary_hue, 1.0, 1.0)
+                pins_to_skip.add(pos)
+
         for i in range(NUM_LEDS):
-            hue = (i / NUM_LEDS + offset) % 1.0
-            r, g, b = hsv_to_rgb(hue, 1.0, BRIGHTNESS)
-            led_strip[i] = (int(r * 255), int(g * 255), int(b * 255))
+            if i in pins_to_skip:
+                continue
+            hue = hue_offset(i, offset)
+            rgb = hsv_to_rgb(hue + offset, 1.0, 0.75)
+            rgb_int = tuple(int(c * 255) for c in rgb)
+            led_strip[i] = rgb_int
+            #led_strip.set_hsv(i, hue, 1.0, BRIGHTNESS)
+        
 
         led_strip.write()
-        await uasyncio.sleep(1.0 / UPDATES)
-        offset += float(SPEED) / 2000.0
+        await uasyncio.sleep(0.00001)
 
-# Function to alternate colors
-async def alternating_blinkies():
-    for _ in range(10):
+
+async def i_dont_know_why_this_works(color=1):
+    global current_color, loop_count
+    hue_1, hue_2 = (100, 220) if color == "1" else (0, 45) if color == "2" else (150, 180)
+    
+    # Assuming BRIGHTNESS is now a value between 0 and 255
+    brightness_scale = MAX_SOLID_BRIGHTNESS / 255.0  # Convert to 0-1 scale
+
+    while True:
         for i in range(NUM_LEDS):
-            hue = 0.33 if i % 2 == 0 else 0.66  # Green and Blue
-            r, g, b = hsv_to_rgb(hue, 1.0, BRIGHTNESS)
-            led_strip[i] = (int(r * 255), int(g * 255), int(b * 255))
-
+            cycle = hue_1 if i % 2 == 0 else hue_2
+            update_strip(i, 1, cycle / MAX_COLOR_CYCLE)  # Update each LED individually
         led_strip.write()
-        await uasyncio.sleep(0.5)
+        await uasyncio.sleep(UPDATE_INTERVAL_BLINKIES)
+
+        for i in range(NUM_LEDS):
+            cycle = hue_2 if i % 2 == 0 else hue_1
+            update_strip(i, 1, cycle / MAX_COLOR_CYCLE)  # Update each LED individually
+        led_strip.write()
+        await uasyncio.sleep(UPDATE_INTERVAL_BLINKIES)
+
+    # Transition to the rainbows animation
+    animation_task = uasyncio.create_task(rainbows())
+    await animation_task
+
+async def alternating_blinkies(color="1"):
+    if color == "1":
+        hue_1, hue_2 = 50, 220
+    elif color == "2":
+        hue_1, hue_2 = 0, 30
+    else:
+        hue_1, hue_2 = 0, 0
+
+    # Assuming BRIGHTNESS is now a value between 0 and 255
+    brightness_scale = MAX_SOLID_BRIGHTNESS / 255.0  # Convert to 0-1 scale
+
+    while True:
+        # First pattern
+        led_settings = []
+        for i in range(NUM_LEDS):
+            hue = hue_1 if i % 2 == 0 else hue_2
+            led_settings.append([i, hue / 360, 1.0, BRIGHTNESS, 0])  # Sleep time is set to 0
+
+        await set_all_leds_once(led_settings)
+        await uasyncio.sleep(UPDATE_INTERVAL_BLINKIES)
+
+        # Second pattern
+        led_settings = []
+        for i in range(NUM_LEDS):
+            hue = hue_2 if i % 2 == 0 else hue_1
+            led_settings.append([i, hue / 360, 1.0, BRIGHTNESS, 0])  # Sleep time is set to 0
+
+        await set_all_leds_once(led_settings)
+        await uasyncio.sleep(UPDATE_INTERVAL_BLINKIES)
+
+async def set_all_leds_once(led_settings):
+    for setting in led_settings:
+        led_index, hue, saturation, value, _ = setting  # Ignore sleep time here
+        r, g, b = hsv_to_rgb(hue, saturation, value)
+        r, g, b = int(r * 255), int(g * 255), int(b * 255)
+        led_strip[led_index] = (r, g, b)
+    
+    led_strip.write()
+
 
 async def run_animation(animation_name, color=1):
     global quit_animation
     global animation_task
+    #quit_animation = False
 
     if animation_task:
-        quit_animation = True
+        # quit_animation = True
         animation_task.cancel()
+        
     if animation_name == "alternating_blinkies":
         animation_task = uasyncio.create_task(alternating_blinkies(color))
     elif animation_name == "rainbows":
         animation_task = uasyncio.create_task(rainbows())
     elif animation_name == "chase":
-        animation_task = uasyncio.create_task(marquee_strip())
+        animation_task = uasyncio.create_task(chase())
+    elif animation_name == "idk":
+        animation_task = uasyncio.create_task(i_dont_know_why_this_works())
     await animation_task
     
+def update_file_replace(msg_string):
+        print(f"Starting update process for {msg_string}...")
+        filename = msg_string
+        try:
+              
+            updated = False
+            print(f"Updating file {filename}")
+            
+            for i,item in enumerate(FILENAMES):
+                print(f"Seeing if {filename} is in {item}")
+
+                if filename in item:
+                    file_to_write = item
+                    print(f"Found filename! Simple name: {filename} Fullly Qualified: {item}")
+
+                    try:
+                        uos.mkdir('tmp')
+                    except:
+                        pass
+                    
+                    updated = False
+                    file_to_write = FILENAMES[i]
+                    response = urequests.get(f'{OTA_HOST}/ota_updates/{MQTT_CLIENT_ID}/{filename}', timeout=5)
+                    response_text = response.text
+                    response.close()
+                    print(f"Found file {filename} with {response_text}")
+                    # Get the file we need to write
+                    # Write to a tmp file
+                    print(f"Going to try to write to tmp/{file_to_write}")
+
+                    with open(f'tmp/{filename}', 'w') as source_file:
+                        source_file.write(response_text)
+                        
+                        
+                    # Overwrite our onboard file               
+                    with open(f'tmp/{filename}', 'r') as source_file, open(file_to_write, 'w') as target_file:
+                        target_file.write(source_file.read())
+                    
+                    uos.remove(f'tmp/{filename}')
+                        
+                    try:
+                        uos.rmdir('tmp')
+                    except:
+                        pass
+                    break
+        except Exception as e:
+            print(f"Exception updating file! {e}")
+
+            
 def update_file_from_mqtt_message(msg_string):
-    data = msg_string.split(",")
-    filename=data[0]
-    field=data[1]
-    new_data=data[2]
-    print(f"Starting update process for {filename}...")
-    update_obj = UpdatePico()
-    update_obj.update_file_from_mqtt_message(filename, [field,new_data])
+    print(f"Starting update process for {msg_string}...")
+    update_file_replace(msg_string)
 
 
 def sub_cb(topic, msg):
@@ -508,7 +600,8 @@ def sub_cb(topic, msg):
     elif topic == b'time':
         handle_time_message(msg_string)
     elif topic == b'update':
-        UpdatePico(msg_string)
+        print(f"Triggered msg string {msg_string}") 
+        update_file_from_mqtt_message(msg_string)
 
 async def mqtt_task(client):
     while True:
@@ -602,7 +695,6 @@ def connectMQTT():
         user=MQTT_USERNAME,
         password=MQTT_PASSWORD,
         keepalive=0,
-        ssl=True,
         ssl_params={'server_hostname':'b0d11619bad64381af076f147cf1cb7c.s1.eu.hivemq.cloud'}
     )
     client.set_callback(sub_cb)
@@ -622,32 +714,35 @@ def connectMQTT():
         except Exception as e:
             print('Error subscribing to %s topic! Error: %s' % (topic.decode(), e))
 
-    return client
+    return client 
 
 def setup():
     global wifi_connected
     # set up wifi
+    
     try:
-        uasyncio.get_event_loop().run_until_complete(connect_to_wifi())
+        for i in range(0, 3):
+            uasyncio.get_event_loop().run_until_complete(connect_to_wifi())
 
-        if wifi_connected:
-            print('Wifi connection successful!')
-            wifi_status = "connected"
-            for _ in range(2):  # Flash red three times
-                make_leds_color(color_hex="008800,0.75")
-                time.sleep(0.5)
-                make_leds_color(color_hex="000000,0.75")
-                time.sleep(0.5)
-            make_leds_color(color_hex="880088,0.75")
-        else:
-            print(f'Wifi connection failed!')
-            wifi_status = "failed"
-            for _ in range(4):  # Flash red three times
-                make_leds_color(color_hex="990000,0.5")
-                time.sleep(.5)
-                make_leds_color(color_hex="000000,0.5")
-                time.sleep(0.5)
-                
+            if wifi_connected:
+                print('Wifi connection successful!')
+                wifi_status = "connected"
+                for _ in range(2):  # Flash red three times
+                    make_leds_color(color_hex="008800,0.75")
+                    time.sleep(0.5)
+                    make_leds_color(color_hex="000000,0.75")
+                    time.sleep(0.5)
+                make_leds_color(color_hex="880088,0.75")
+                break
+            else:
+                print(f'Wifi connection failed!')
+                wifi_status = "failed"
+                for _ in range(4):  # Flash red three times
+                    make_leds_color(color_hex="990000,0.5")
+                    time.sleep(.5)
+                    make_leds_color(color_hex="000000,0.5")
+                    time.sleep(0.5)
+                    
                 
     except Exception as e:
         print(f'Wifi connection failed! {e}')
@@ -674,7 +769,7 @@ def setup():
             
 async def main():
     client = setup()
-    uasyncio.create_task(run_animation("chase"))
+    uasyncio.create_task(run_animation(STARTING_ANIMATION))
 
     if wifi_connected:
         uasyncio.create_task(mqtt_task(client))
@@ -686,6 +781,7 @@ async def main():
 uasyncio.run(main()) 
     
     
+
 
 
 
