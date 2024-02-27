@@ -1,5 +1,4 @@
-import machine, neopixel
-import uasyncio
+import machine, neopixel, time
 
 # Constants
 NUM_LEDS = 144  # Change this to the number of LEDs in your strip
@@ -9,10 +8,10 @@ MAX_COLOR_CYCLE = 144  # Maximum value for the color cycle
 # Setup the LED strip
 pin = machine.Pin(28)  # Change the pin number to the one you're using
 strip = neopixel.NeoPixel(pin, NUM_LEDS)
+loop_count = 0
 
 # Global variable for direction change
 direction_change = False
-loop_count = 0
 
 def update_strip(position, length, cycle):
     # Turn off all LEDs
@@ -53,7 +52,7 @@ def toggle_direction(timer):
 timer = machine.Timer(-1)
 timer.init(period=1000, mode=machine.Timer.PERIODIC, callback=toggle_direction)
 
-async def clock_hand_animation():
+def clock_hand_animation():
     global direction_change, loop_count
     position = 0
     direction = 1
@@ -61,6 +60,7 @@ async def clock_hand_animation():
 
     while True:
         update_strip(position, SEGMENT_LENGTH, cycle)
+        #time.sleep(0.001)  # Pause for a short duration
 
         # Update the position and cycle
         position += direction
@@ -72,9 +72,7 @@ async def clock_hand_animation():
         if direction_change:
             direction *= -1
             direction_change = False
-            loop_count += NUM_LEDS // 120
-
-        await uasyncio.sleep(0.01)  # Non-blocking sleep
+            loop_count += NUM_LEDS//120
 
 # Start the animation
-uasyncio.run(clock_hand_animation())
+clock_hand_animation()

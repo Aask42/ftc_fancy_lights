@@ -1,39 +1,60 @@
+from CONFIG.OTA_CONFIG import OTA_HOST, PROJECT_NAME, FILENAMES
+from CONFIG.MQTT_CONFIG import MQTT_CLIENT_ID
+import uos
+import urequests
+import micropython as mp
+import gc
 
-class UpdatePico():
-    def __init__(self):
-        print("Starting update process...")
-        self.config_file_list = ["CLOCK_CONFIG.py","FTC_TEAM_CONFIG.py", "LED_MANAGER.py", "MQTT_CONFIG.py", "WIFI_CONFIG.py"]
 
-    def update_file_all(self, filename = None, content_to_write=None):
-        if content_to_write:
-            print(f"Updating file {filename}")
-            with open(filename, 'w') as config_file:
-                config_file.write(content_to_write)        
-    def update_file_replace(self, filename=None, content_to_update=None):
-        if content_to_update and filename in self.config_file_list:
-            
-            field, new_content = content_to_update
-            updated = False
-            new_lines = []
 
-            print(f"Updating file {filename}")
+def update_file_replace(msg_string):
+    print(f"Starting update process for {msg_string}...")
+    filename = msg_string
+    
+    mp.mem_info(1)
+    gc.collect()
+    mp.mem_info(1)
+    
+    try:
+          
+        updated = False
+        print(f"Updating file {filename}")
+        
+        for i,item in enumerate(FILENAMES):
+            print(f"Seeing if {filename} is in {item}")
 
-            # Read the file and modify the specified field
-            with open(filename, 'r') as config_file:
-                for line in config_file:
-                    if line.startswith(field):
-                        new_lines.append(f'{field}="{new_content}"\n')
-                        updated = True
-                    else:
-                        new_lines.append(line)
+            if filename in item:
+                file_to_write = item
+                print(f"Found filename! Simple name: {filename} Fullly Qualified: {item}")
+                try:
+                    uos.mkdir('tmp')
+                except:
+                    pass
+                
+                updated = False
+                file_to_write = FILENAMES[i]
+                response = urequests.get(f'{OTA_HOST}/ota_updates/{MQTT_CLIENT_ID}/{filename}', timeout=5)
+                response_text = response.text
+                response.close()
+                print(f"Found file {filename} with {response_text}")
+                # Get the file we need to write
+                # Write to a tmp file
+                print(f"Going to try to write to tmp/{file_to_write}")
 
-            # If the field was not found in the file, add it
-            if not updated:
-                new_lines.append(f'{field}="{new_content}"\n')
-
-            # Write the updated content back to the file
-            with open(filename, 'w') as config_file:
-                config_file.writelines(new_lines)
-        else:
-            print("Filename or content to update is missing")
-     
+                with open(f'tmp/{filename}', 'w') as source_file:
+                    source_file.write(response_text)
+                    
+                    
+                # Overwrite our onboard file               
+                with open(f'tmp/{filename}', 'r') as source_file, open(file_to_write, 'w') as target_file:
+                    target_file.write(source_file.read())
+                
+                uos.remove(f'tmp/{filename}')
+                    
+                try:
+                    uos.rmdir('tmp')
+                except:
+                    pass
+                break
+    except Exception as e:
+        print(f"Exception updating file! {e}")

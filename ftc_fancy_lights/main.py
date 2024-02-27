@@ -3,6 +3,7 @@
 Written by: Amelia Wietting
 Date: 20240124
 For: FTC Team 19415
+This update was pushed OTA. Do not change it unless you know what you are doing
 '''
 
 from CONFIG.WIFI_CONFIG import COUNTRY, MAX_WIFI_CONNECT_TIMEOUT, WIFI_LIST
@@ -12,6 +13,9 @@ from CONFIG.CLOCK_CONFIG import NTP_SERVER, TIMEZONE_OFFSET, DAYLIGHT_SAVING
 from CONFIG.LED_MANAGER import NUM_LEDS, LED_PIN, BRIGHTNESS, MAX_SOLID_BRIGHTNESS, STARTING_ANIMATION
 from CONFIG.OTA_CONFIG import OTA_HOST, PROJECT_NAME, FILENAMES
 
+from updates import update_file_replace
+from helper import hsv_to_rgb
+import micropython
 import uasyncio
 import time
 import ntptime
@@ -25,7 +29,6 @@ import json
 import neopixel
 import uos
 
-import micropython_ota
 
 # Audio reactive constants
 BASS_COLOR = (255, 0, 0)  # Red for bass
@@ -170,32 +173,6 @@ def make_leds_color(color_hex="FF0000,4"):
         led_strip[i] = (r, g, b)
     led_strip.write()  # Update the strip with new colors
 
-
-
-async def handle_audio_data(msg):
-    global current_leds, target_leds
-    global pause_animation, lit_led
-    print(f"Not Implemented {msg} ")
-#     pause_animation = True
-#     data = msg.split(",")
-#     bass_leds = int(data[0])
-#     treble_leds = int(data[1])
-#     is_beat = bool(data[2])
-#     is_same_beat = int(data[3])
-#     lit_led = 0
-#     print(f"{is_beat}")
-#     if is_beat:
-#         pause_animation = True
-#         make_leds_color("AA00FF")
-#         time.sleep(0.5 * is_same_beat);    
-#         pause_animation = False
-#         led_strip.set_rgb(lit_led, 255,255,255)
-#         lit_led += 1 
-#         lit_led = int(lit_led % NUM_LEDS/2 + NUM_LEDS/2)
-#         
-
-   
-
 # Set the range of pins we want
 width_of_wifi_status_leds = 2
 # Figure out where our center LED for the wifi indicator will be
@@ -211,20 +188,6 @@ wifi_led_on = False
 
 second_changed = False
 
-
-# Helper function to convert HSV to RGB
-def hsv_to_rgb(h, s, v):
-    if s == 0.0: return (v, v, v)
-    i = int(h * 6.)
-    f = (h * 6.) - i
-    p, q, t = v * (1. - s), v * (1. - s * f), v * (1. - s * (1. - f))
-    i %= 6
-    if i == 0: return (v, t, p)
-    if i == 1: return (q, v, p)
-    if i == 2: return (p, v, t)
-    if i == 3: return (p, q, v)
-    if i == 4: return (t, p, v)
-    if i == 5: return (v, p, q)
 def hue_offset(index, offset, divisor = 2):
     return (float(index) / (NUM_LEDS // divisor) + offset) % 1.0
         
@@ -376,6 +339,7 @@ def get_clock_hand_positions():
     second_pos = int((second / 60.0) * NUM_LEDS)
 
     return hour_pos, minute_pos, second_pos
+
 SPEED = 5
 UPDATES = 1000
 async def rainbows():
@@ -517,53 +481,7 @@ async def run_animation(animation_name, color=1):
         animation_task = uasyncio.create_task(i_dont_know_why_this_works())
     await animation_task
     
-def update_file_replace(msg_string):
-        print(f"Starting update process for {msg_string}...")
-        filename = msg_string
-        try:
-              
-            updated = False
-            print(f"Updating file {filename}")
-            
-            for i,item in enumerate(FILENAMES):
-                print(f"Seeing if {filename} is in {item}")
 
-                if filename in item:
-                    file_to_write = item
-                    print(f"Found filename! Simple name: {filename} Fullly Qualified: {item}")
-
-                    try:
-                        uos.mkdir('tmp')
-                    except:
-                        pass
-                    
-                    updated = False
-                    file_to_write = FILENAMES[i]
-                    response = urequests.get(f'{OTA_HOST}/ota_updates/{MQTT_CLIENT_ID}/{filename}', timeout=5)
-                    response_text = response.text
-                    response.close()
-                    print(f"Found file {filename} with {response_text}")
-                    # Get the file we need to write
-                    # Write to a tmp file
-                    print(f"Going to try to write to tmp/{file_to_write}")
-
-                    with open(f'tmp/{filename}', 'w') as source_file:
-                        source_file.write(response_text)
-                        
-                        
-                    # Overwrite our onboard file               
-                    with open(f'tmp/{filename}', 'r') as source_file, open(file_to_write, 'w') as target_file:
-                        target_file.write(source_file.read())
-                    
-                    uos.remove(f'tmp/{filename}')
-                        
-                    try:
-                        uos.rmdir('tmp')
-                    except:
-                        pass
-                    break
-        except Exception as e:
-            print(f"Exception updating file! {e}")
 
             
 def update_file_from_mqtt_message(msg_string):
@@ -779,9 +697,3 @@ async def main():
         await uasyncio.sleep(0)  # Main loop sleep, to keep the loop alive
 
 uasyncio.run(main()) 
-    
-    
-
-
-
-
