@@ -44,7 +44,7 @@ class HalfSecondClock:
     def start(self):
         while self.running:
             self.tick()
-            time.sleep(1)  # Wait for one second
+            time.sleep(1.0)  # Wait for one second
 
     def stop(self):
         self.running = False
@@ -103,20 +103,18 @@ def handle_animate():
     publish_message("animate", animation)
        
 def handle_update():
-    config_file_list = ["CONFIG/CLOCK_CONFIG.py","CONFIG/FTC_TEAM_CONFIG.py", "CONFIG/LED_MANAGER.py", "CONFIG/MQTT_CONFIG.py", "CONFIG/WIFI_CONFIG.py"]
+    config_file_list = ["main.py","CLOCK_CONFIG.py","FTC_TEAM_CONFIG.py", "LED_MANAGER.py", "MQTT_CONFIG.py", "WIFI_CONFIG.py"]
     while True: 
         for i,item in enumerate(config_file_list):
             print(f"{i}: {item}")
         input_data = input("Select a filename: ")
         try:
             filename = config_file_list[int(input_data)]
-            field = input("What field would you like to update in this file? BRIGHTNESS, WIFI_LIST, etc...")
-            content = input("What is the new value?")
             break
         except:
             print("Invalid option")
         
-    message = f"{filename}, {field}, {content}"
+    message = f"{filename}"
     publish_message("update", message)
 
     
@@ -235,7 +233,10 @@ def process_audio():
             beat_length = 0  # Reset beat length counter
             print(f"{total_energy - previous_energy}")
             message = f"0,0,1,{beat_length}"
-            publish_message("audio_reactive", message)
+            current_time = datetime.now().strftime("%H:%M:%S")  # Format: Hours:Minutes:Seconds.Milliseconds
+            msg = f"{0000},{current_time}"
+            # print(f"Tick: {self.tick_count}, Elapsed Time: {elapsed_time:.2f} seconds")
+            publish_message('time', msg)
             beat_length = 0
 
         # Update previous total energy for next iteration
@@ -308,7 +309,7 @@ def handle_hold():
                 print("you pressed enter")
                 message = f"{color},0.25"
                 publish_message("color_change", message)
-                time.sleep(5.00)
+                #time.sleep(5.00)
             else:
                 # Optional: Perform some action when Enter is not pressed
                 #time.sleep(0.25)
@@ -327,15 +328,14 @@ clock_thread.start()
 client = mqtt.Client(client_id=MQTT_CLIENT_ID)
 client.on_connect = on_connect
 client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
-client.tls_set()  # Enable SSL/TLS support
+#client.tls_set()  # Enable SSL/TLS support
 
 # Connect to the MQTT server
 try:
     client.connect(MQTT_SERVER, MQTT_PORT, 60)
 except Exception as e:
     print(f"Error connecting to MQTT server: {e}")
-    exit(1)
-
+    exit()
 client.loop_start()
 
 run_loop = True
