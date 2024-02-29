@@ -1,0 +1,3 @@
+COUNTRY="US"
+WIFI_LIST=[["WhyFhy","WhyKnot42!"],["FTC-IOT","To!nfinity"]]
+MAX_WIFI_CONNECT_TIMEOUT=15
