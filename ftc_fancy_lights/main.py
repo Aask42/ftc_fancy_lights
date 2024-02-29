@@ -202,7 +202,7 @@ def update_strip(position, length, cycle):
 
     # Calculate the color based on the cycle value
     hue = cycle / MAX_COLOR_CYCLE
-    color = hsv_to_rgb(hue, 1, 0.5)
+    color = hsv_to_rgb(hue, 1, BRIGHTNESS)
 
     # Turn on LEDs in the specified segment
     for i in range(position, position + length):

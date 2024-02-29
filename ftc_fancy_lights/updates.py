@@ -13,7 +13,6 @@ def update_file_replace(msg_string):
     
     mp.mem_info(1)
     gc.collect()
-    mp.mem_info(1)
     
     try:
           
@@ -36,7 +35,7 @@ def update_file_replace(msg_string):
                 response = urequests.get(f'{OTA_HOST}/ota_updates/{MQTT_CLIENT_ID}/{filename}', timeout=5)
                 response_text = response.text
                 response.close()
-                print(f"Found file {filename} with {response_text}")
+                #print(f"Found file {filename} with {response_text}")
                 # Get the file we need to write
                 # Write to a tmp file
                 print(f"Going to try to write to tmp/{file_to_write}")
