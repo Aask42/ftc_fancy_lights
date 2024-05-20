@@ -1,3 +1,4 @@
 COUNTRY="US"
-WIFI_LIST=[["WhyFhy","WhyKnot42!"],["FTC-IOT","To!nfinity"]]
+WIFI_LIST=[["CONFLUENCE GUEST",""],#,["Fongs Guest","Happykitty223!"]]
 MAX_WIFI_CONNECT_TIMEOUT=15
+ 
